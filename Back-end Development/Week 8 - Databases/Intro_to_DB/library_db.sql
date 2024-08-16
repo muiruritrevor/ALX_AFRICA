@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS books (
 );
 
 -- Insert some sample data into the 'books' table
+-- Done
 INSERT INTO books (title, author, isbn) VALUES ('1984', 'George Orwell', '9780451524935');
 INSERT INTO books (title, author, isbn) VALUES ('To Kill a Mockingbird', 'Harper Lee', '9780060935467');
 
