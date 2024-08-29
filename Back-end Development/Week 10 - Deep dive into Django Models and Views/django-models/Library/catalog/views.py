@@ -2,7 +2,7 @@ from django.shortcuts import render
 from .models import Genre, Author, Book, BookInstance, Library, Librarian
 
 def index(request):
-    """View functionfor home page of site."""
+    """View function for home page of site."""
 
     # Generate counts of some of the main object
     num_books = Book.objects.all().count()
