@@ -9,6 +9,12 @@ from .models import Genre, Author, Book, Library, Librarian, BookInstance
 # admin.site.register(Librarian)
 # admin.site.register(BookInstance)
 
+# @admin.register(Genre)
+# class Genre(admin.ModelAdmin):
+#     list_display = ('genre')
+#     inlines = [Genre]
+admin.site.register(Genre)
+
 class AuthorAdmin(admin.ModelAdmin):
     list_display = ('last_name', 'first_name', 'date_of_birth',)
     fields = ['first_name', 'last_name', ('date_of_birth', 'date_of_death')]
