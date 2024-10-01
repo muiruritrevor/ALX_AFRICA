@@ -38,11 +38,10 @@ class Book(models.Model):
     ISBN = models.CharField(max_length=13, unique=True, blank=True, null=True, verbose_name="ISBN", db_index=True)
     publication_date = models.DateField(null=True, blank=True)
     total_copies = models.PositiveIntegerField(default=1)
-    available_copies = models.PositiveIntegerField(default=1)
+    available_copies = models.PositiveIntegerField(default=0)
     genre = models.ManyToManyField(Genre, blank=True, help_text="Select a genre for this book")
     description = models.TextField(max_length=1000, blank=True, default="No description available")
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    #created = models.DateTimeField(auto_now_add=True,null=False,blank=False)
     status = models.CharField(
         max_length=1,
         choices=STATUS_CHOICES,
@@ -60,7 +59,6 @@ class Book(models.Model):
             raise ValidationError("Total copies cannot be negative.")
         if self.available_copies < 0:
             raise ValidationError("Available copies cannot be negative.")
-    
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -82,31 +80,69 @@ class Book(models.Model):
         return f"{self.title} by {self.author or 'Unknown'}"
 
     def display_genre(self):
-        """Create a string for the Genre. This is required to display genre in Admin."""
-        return ', '.join(genre.name for genre in self.genre.all()[:3])
-
+        """Create a string for the Genre."""
+        return ', '.join(genre.name for genre in self.genre.all())
+    
     display_genre.short_description = 'Genre'
+    
+    @property
+    def genre_list(self):
+        """Return a list of genre IDs for this book."""
+        return list(self.genre.values_list('id', flat=True))
 
-    def checkout(self, user):
-        if self.available_copies > 0:
-            self.available_copies -= 1
-            if self.available_copies == 0:
-                self.status = 'C'
-            self.save()
-            return Transaction.objects.create(user=user, book=self)
-        else:
-            raise ValidationError("No available copies to checkout.")
+    def borrow(self, user):
+        return BorrowedBook.create_borrowed_book(user, self)
 
-    def return_book(self, transaction):
-        if transaction.return_date is None:
-            transaction.return_date = timezone.now().date()
-            transaction.save()
-            self.available_copies += 1
-            if self.status == 'C':
-                self.status = 'A'
-            self.save()
+class BorrowedBook(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    book = models.ForeignKey(Book, on_delete=models.CASCADE)
+    borrowed_date = models.DateField(auto_now_add=True)
+    due_date = models.DateField(null=True, blank=True)
+    returned_date = models.DateField(null=True, blank=True)
+    is_overdue = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.book.title} borrowed by {self.user.username} on {self.borrowed_date}"
+    
+
+    def save(self, *args, **kwargs):
+        if self.borrowed_date:  # Ensure borrowed_date is not None
+            if not self.due_date:
+                self.due_date = self.borrowed_date + timedelta(days=14)
+
+            # Check if the book is overdue
+            self.is_overdue = self.returned_date is None and timezone.now().date() > self.due_date
         else:
+            # Handle the case when borrowed_date is None, e.g., set it to the current date
+            self.borrowed_date = timezone.now().date()
+            self.due_date = self.borrowed_date + timedelta(days=14)
+            self.is_overdue = False  # Can't be overdue if just borrowed
+
+        super().save(*args, **kwargs)
+
+    def return_book(self):
+        if self.returned_date:
             raise ValidationError("This book has already been returned.")
+        self.returned_date = timezone.now().date()
+        self.is_overdue = False
+        self.book.available_copies += 1
+        self.book.update_status()
+        self.save()
+
+    @property
+    def is_active(self):
+        return self.returned_date is None
+
+    @classmethod
+    def create_borrowed_book(cls, user, book):
+        if book.available_copies > 0:
+            borrowed_book = cls(user=user, book=book)
+            book.available_copies -= 1
+            book.update_status()
+            borrowed_book.save()
+            return borrowed_book
+        else:
+            raise ValidationError("No available copies to borrow.")
 
 class Transaction(models.Model):
     TRANSACTION_TYPES = [
@@ -118,6 +154,7 @@ class Transaction(models.Model):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='transactions')
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='transactions')
+    borrowed_book = models.OneToOneField(BorrowedBook, on_delete=models.SET_NULL, null=True, blank=True, related_name='transaction')
     transaction_type = models.CharField(max_length=2, choices=TRANSACTION_TYPES, default='CO')
     transaction_date = models.DateTimeField(default=timezone.now, db_index=True)
     due_date = models.DateField(null=True, blank=True)
@@ -132,28 +169,31 @@ class Transaction(models.Model):
             raise ValidationError("Return date cannot be before transaction date.")
 
     def save(self, *args, **kwargs):
-        if self.transaction_type == 'CO' and not self.due_date:
-            self.due_date = self.transaction_date.date() + timedelta(days=14)
+        if self.transaction_type == 'CO':
+            if not self.borrowed_book:
+                self.borrowed_book = BorrowedBook.create_borrowed_book(self.user, self.book)
+            if not self.due_date:
+                self.due_date = self.transaction_date.date() + timedelta(days=14)
         
-        if self.due_date:
-            self.is_overdue = self.return_date is None and timezone.now().date() > self.due_date
+        self.is_overdue = self.return_date is None and self.due_date and timezone.now().date() > self.due_date
 
         self.full_clean()
         super().save(*args, **kwargs)
 
     def complete(self):
         if self.return_date:
-            raise ValidationError("This book has already been returned.")
-        self.return_date = timezone.now()
+            raise ValidationError("This transaction has already been completed.")
+        self.return_date = timezone.now().date()
         self.is_overdue = False
-        self.book.available_copies += 1
-        self.book.save()
+        if self.borrowed_book:
+            self.borrowed_book.return_book()
         self.save()
 
     def cancel_reservation(self):
-        """Cancel the reservation and update relevant fields."""
-        self.return_date = None
-        self.is_overdue = False  # Reset overdue status
+        if self.transaction_type != 'RS':
+            raise ValidationError("Only reservations can be canceled.")
+        self.return_date = timezone.now().date()
+        self.is_overdue = False
         self.save()
 
     def __str__(self):

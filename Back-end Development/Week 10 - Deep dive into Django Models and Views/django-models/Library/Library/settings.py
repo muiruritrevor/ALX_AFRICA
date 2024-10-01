@@ -42,13 +42,14 @@ INSTALLED_APPS = [
     'accounts.apps.AccountsConfig',
     'rest_framework',
     'rest_framework.authtoken',
+    'widget_tweaks'
 
 ]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+        # 'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -95,7 +96,7 @@ DATABASES = {
         'NAME': 'Library_db',
         'USER': 'root',
         'PASSWORD': 'tking',    
-        'HOST': '127.0.0.1',
+        'HOST': 'localhost',
         'PORT': '3306',
     }
 }
