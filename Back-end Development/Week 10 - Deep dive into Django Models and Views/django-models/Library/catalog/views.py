@@ -3,13 +3,14 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
 from django.db import transaction
+from django.db.models import Count
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import serializers
-from .models import Book, Transaction
+from .models import Book, Transaction, Genre, BorrowedBook
 from .serializers import BookSerializer, TransactionSerializer
 from .forms import BookForm
 from .permissions import IsLibrarianOrReadOnly
@@ -20,6 +21,35 @@ class StandardResultsSetPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 100
 
+@login_required
+def dashboard(request):
+    # Get the user's currently borrowed books
+    current_borrowed_books = BorrowedBook.objects.filter(user=request.user, returned_date__isnull=True)
+    
+    # Get the total number of books the user has borrowed
+    total_borrowed = BorrowedBook.objects.filter(user=request.user).count()
+    
+    # Get the user's favorite genres (top 3)
+    favorite_genres = BorrowedBook.objects.filter(user=request.user) \
+        .values('book__genre') \
+        .annotate(count=Count('book__genre')) \
+        .order_by('-count')[:3]
+    
+    # Get books due soon (within 7 days)
+    from datetime import timedelta
+    from django.utils import timezone
+    books_due_soon = current_borrowed_books.filter(
+        due_date__lte=timezone.now() + timedelta(days=7)
+    )
+    
+    context = {
+        'current_borrowed_books': current_borrowed_books,
+        'total_borrowed': total_borrowed,
+        'favorite_genres': favorite_genres,
+        'books_due_soon': books_due_soon,
+    }
+    
+    return render(request, 'catalog/dashboard.html', context)
 
 @login_required
 def index_view(request):
@@ -29,6 +59,55 @@ def index_view(request):
         'available_books': available_books,
     }
     return render(request, 'catalog/index.html', context=context)
+
+@login_required
+def reading_history(request):
+    # Get all books borrowed by the user, ordered by borrow date
+    history = BorrowedBook.objects.filter(user=request.user).order_by('-borrowed_date')
+
+    # Create a list to hold the reading history with transaction status
+    reading_history_with_status = []
+    
+    for record in history:
+        reading_history_with_status.append({
+            'book': record.book,
+            'borrowed_date': record.borrowed_date,
+            'returned_date': record.returned_date,
+            'status': 'Returned' if record.returned_date else 'Checked Out',
+        })
+
+    context = {
+        'reading_history': reading_history_with_status,
+    }
+    
+    return render(request, 'catalog/reading_history.html', context)
+
+
+@login_required
+def recommendations(request):
+    # Get user's favorite genres
+    favorite_genres = BorrowedBook.objects.filter(user=request.user) \
+        .values('book__genre') \
+        .annotate(count=Count('book__genre')) \
+        .order_by('-count')[:3]
+    
+    favorite_genre_names = [genre['book__genre'] for genre in favorite_genres]
+    
+    # Get books in user's favorite genres that they haven't borrowed yet
+    recommended_books = Book.objects.filter(genre__in=favorite_genre_names) \
+        .exclude(borrowedbook__user=request.user) \
+        .distinct()[:10]
+    
+    # Get popular books across all users
+    popular_books = Book.objects.annotate(borrow_count=Count('borrowedbook')) \
+        .order_by('-borrow_count')[:5]
+    
+    context = {
+        'recommended_books': recommended_books,
+        'popular_books': popular_books,
+    }
+    
+    return render(request, 'catalog/recommendations.html', context)
   
 @login_required
 def add_book_view(request):
@@ -36,19 +115,16 @@ def add_book_view(request):
         form = BookForm(request.POST)
         if form.is_valid():
             book = form.save(commit=False)
-            book.available_copies = book.total_copies
+            book.created_by = request.user
             book.save()
-            messages.success(request, 'Book added successfully.')
+            # form.save_m2m()  # Save many-to-many relationships
+            messages.success(request, 'Book added successfully!')
             return redirect('add_book_view')
     else:
         form = BookForm()
     
     books = Book.objects.all().order_by('-id')
-    context = {
-        'form': form,
-        'books': books,
-    }
-    return render(request, 'catalog/add_book.html', context)
+    return render(request, 'catalog/add_book.html', {'form': form, 'books': books})
 
 @login_required
 def edit_book_view(request, book_id):
@@ -74,8 +150,7 @@ def delete_book_view(request, book_id):
     if request.method == 'POST':
         book.delete()
         messages.success(request, 'Book deleted successfully.')
-        return redirect('add_book_view')
-    
+        return redirect('index')
     context = {
         'book': book,
     }
@@ -124,16 +199,13 @@ def return_book_view(request, transaction_id):
             transaction_instance.book.save()
             transaction_instance.save()
         messages.success(request, f"You've successfully returned '{transaction_instance.book.title}'.")
-    
+
+        # Here we will add the transaction to the user's reading history if it's not already reflected.
+        # This can also be handled in the reading history view, depending on how you are managing the data.
+        # Assuming that reading history is based on BorrowedBook model:
+        BorrowedBook.objects.filter(user=request.user, book=transaction_instance.book, returned_date__isnull=True).update(returned_date=timezone.now())
+
     return redirect('book_detail_view', book_id=transaction_instance.book.id)
-
-
-# @login_required
-# def user_transactions_view(request):
-#     """View to display a user's transactions."""
-#     transactions = Transaction.objects.filter(user=request.user)
-#     return render(request, 'catalog/user_transactions.html', {'transactions': transactions})
-
 
 @login_required
 def user_transactions_view(request):
