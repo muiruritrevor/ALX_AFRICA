@@ -1,0 +1,70 @@
+
+{% extends 'catalog/base_generic.html' %}
+
+{% block content %}
+<h1 class="mb-4">Dashboard</h1>
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <h5 class="card-title">Currently Borrowed Books</h5>
+                <p class="card-text">You have {{ current_borrowed_books.count }} book(s) currently borrowed.</p>
+                <ul class="list-group">
+                    {% for borrowed in current_borrowed_books|slice:":5" %}
+                        <li class="list-group-item">{{ borrowed.book.title }} (Due: {{ borrowed.due_date|date:"F d, Y" }})</li>
+                    {% endfor %}
+                </ul>
+                {% if current_borrowed_books.count > 5 %}
+                    <a href="{% url 'borrowed_books' %}" class="btn btn-primary mt-3">View All</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <h5 class="card-title">Books Due Soon</h5>
+                <p class="card-text">You have {{ books_due_soon.count }} book(s) due within the next 7 days.</p>
+                <ul class="list-group">
+                    {% for borrowed in books_due_soon %}
+                        <li class="list-group-item">{{ borrowed.book.title }} (Due: {{ borrowed.due_date|date:"F d, Y" }})</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <h5 class="card-title">Reading Statistics</h5>
+                <p class="card-text">Total books borrowed: {{ total_borrowed }}</p>
+                <h6>Favorite Genres:</h6>
+                <ul>
+                    {% for genre in favorite_genres %}
+                        <li>{{ genre.book__genre }} ({{ genre.count }} books)</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <h5 class="card-title">Quick Links</h5>
+                <div class="list-group">
+                    <a href="{% url 'index' %}" class="list-group-item list-group-item-action">Browse Available Books</a>
+                    <a href="{% url 'user_transactions_view' %}" class="list-group-item list-group-item-action">View All Borrowed Books</a>
+                    <a href="{% url 'reading_history' %}" class="list-group-item list-group-item-action">Reading History</a>
+                    <a href="{% url 'recommendations' %}" class="list-group-item list-group-item-action">Get Recommendations</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
