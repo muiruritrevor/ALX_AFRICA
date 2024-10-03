@@ -1,0 +1,57 @@
+{% extends 'catalog/base_generic.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-12">
+        <h2 class="my-4 text-center">Your Transactions</h2>
+        {% if transactions %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>Book Title</th>
+                            <th>Transaction Date</th>
+                            <th>Return Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in transactions %}
+                        <tr>
+                            <td>{{ transaction.book.title }}</td>
+                            <td>{{ transaction.transaction_date|date:"Y-m-d H:i" }}</td>
+                            <td>
+                                {% if transaction.return_date %}
+                                    {{ transaction.return_date|date:"Y-m-d" }}
+                                {% else %}
+                                    <span class="text-danger">Not Returned</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if transaction.return_date %}
+                                    <span class="badge badge-success">Returned</span>
+                                {% else %}
+                                    <span class="badge badge-warning">Checked Out</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if not transaction.return_date %}
+                                    <a href="{% url 'return_book' transaction.id %}" class="btn btn-danger btn-sm">Return</a>
+                                {% else %}
+                                    <button class="btn btn-secondary btn-sm" disabled>Returned</button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info text-center">
+                You have no transactions to display.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock content %}

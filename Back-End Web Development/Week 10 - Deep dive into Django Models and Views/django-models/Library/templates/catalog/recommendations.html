@@ -1,0 +1,46 @@
+{% extends 'catalog/base_generic.html' %}
+
+{% block content %}
+<h1 class="mb-4">Book Recommendations</h1>
+
+<div class="row">
+    <div class="col-md-8 mb-4">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <h5 class="card-title">Recommended for You</h5>
+                <p class="card-text">Based on your reading history and favorite genres.</p>
+                <ul class="list-group">
+                    {% for book in recommended_books %}
+                        <li class="list-group-item">
+                            <h6 class="mb-1">{{ book.title }}</h6>
+                            <p class="mb-1">by {{ book.author }}</p>
+                            <small>Genre: {{ book.genre }}</small>
+                        </li>
+                    {% empty %}
+                        <li class="list-group-item">No recommendations available at this time.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <h5 class="card-title">Popular Books</h5>
+                <p class="card-text">Trending across all users.</p>
+                <ul class="list-group">
+                    {% for book in popular_books %}
+                        <li class="list-group-item">
+                            <h6 class="mb-1">{{ book.title }}</h6>
+                            <small>by {{ book.author }}</small>
+                        </li>
+                    {% empty %}
+                        <li class="list-group-item">No popular books available at this time.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

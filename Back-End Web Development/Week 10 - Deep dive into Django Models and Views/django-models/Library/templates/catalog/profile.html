@@ -1,0 +1,42 @@
+{% extends "catalog/base_generic.html" %}
+
+{% block content %}
+<h1>{{ user.username }}'s Profile</h1>
+
+<h2>Update Profile</h2>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn btn-primary">Update Profile</button>
+</form>
+
+<h2>Transaction History</h2>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Book</th>
+            <th>Check Out Date</th>
+            <th>Return Date</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for transaction in transactions %}
+        <tr>
+            <td>{{ transaction.book.title }}</td>
+            <td>{{ transaction.transaction_date }}</td>
+            <td>{{ transaction.return_date|default:"Not returned" }}</td>
+            <td>
+                {% if not transaction.return_date %}
+                <a href="{% url 'return_book' transaction.id %}" class="btn btn-primary">Return Book</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="4">No transactions found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
